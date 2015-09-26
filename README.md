@@ -5,11 +5,13 @@
 # Examples
 
 ZSH configuration:
+
 	precmd() {
 		[ "$PWD" -ef "$HOME" ] || fdb -a "$PWD"
 	}
 
 Shell function for jumping to most frecent directory that matches the patterns given as arguments:
+
 	z() {
 		local dir="$(fdb -q "$@" | head -n 1)"
 		[ -z "$dir" ] && return 1
