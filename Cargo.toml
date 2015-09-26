@@ -1,0 +1,11 @@
+[package]
+name = "fdb"
+version = "0.1.0"
+authors = ["Bastien Dejean <nihilhill@gmail.com>"]
+readme = "README.md"
+
+[dependencies]
+time = "*"
+rustc-serialize = "*"
+getopts = "*"
+regex = "*"
