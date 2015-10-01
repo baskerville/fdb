@@ -136,7 +136,7 @@ fn cmd_add(settings: &Settings, data: &mut Vec<Item>, paths: &Vec<String>) {
         }
         data.push(Item::new(&path));
     }
-    if data.len() > settings.history_size {
+    if settings.history_size > 0 && data.len() > settings.history_size {
         cmd_sort(data);
         while data.len() > settings.history_size {
             data.pop();
@@ -183,6 +183,7 @@ fn main() {
     opts.optflag("q", "query", "Query for patterns in the database.");
     opts.optflag("a", "add", "Add paths to the database.");
     opts.optflag("d", "delete", "Delete paths from the database.");
+    opts.optflag("u", "unlimited", "Don't limit the size fo the database.");
     opts.optflag("h", "help", "Print this help message.");
     opts.optflag("v", "version", "Print the version number.");
     opts.optopt("i", "db-path", "Use the given database.", "DB_PATH");
@@ -221,6 +222,10 @@ fn main() {
     settings.db_path = matches.opt_str("i").unwrap_or(settings.db_path);
     settings.db_path = settings.db_path.replace("~", home_dir);
     settings.history_size = get_env::<usize>("FDB_HISTORY_SIZE", settings.history_size);
+
+    if matches.opt_present("u") {
+        settings.history_size = 0;
+    }
 
     let mut data: Vec<Item> = match load_data(&settings.db_path) {
         Ok(val) => val,
