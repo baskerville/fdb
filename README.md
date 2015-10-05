@@ -13,7 +13,7 @@ ZSH configuration:
 Shell function for jumping to most frecent directory that matches the patterns given as arguments:
 
 	z() {
-		local dir="$(fdb -q "$@" | head -n 1)"
+		local dir=$(fdb -q "$@" | head -n 1)
 		[ -z "$dir" ] && return 1
 		cd "$dir" || fdb -d "$dir"
 	}
