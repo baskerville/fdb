@@ -28,3 +28,8 @@ The *frecency* is computed as:
 	 0.25 + 3·10⁻⁶·A
 
 Where *H* is the number of hits, and *A* the age.
+
+# Environment variables
+
+- `FDB_DB_PATH`.
+- `FDB_HISTORY_SIZE`.
