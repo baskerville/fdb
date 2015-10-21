@@ -27,7 +27,8 @@ struct Item {
 
 struct Settings {
     history_size: usize,
-    db_path: String
+    db_path: String,
+    sort_by: String
 }
 
 enum Action {
@@ -121,8 +122,13 @@ fn save_data(data: &Vec<Item>, path: &str) -> Result<(), Error> {
     Ok(())
 }
 
-fn cmd_sort(data: &mut Vec<Item>) {
-    data.sort_by(|a, b| a.frecency().partial_cmp(&b.frecency()).unwrap_or(Ordering::Equal).reverse());
+fn cmd_sort(method: &str, data: &mut Vec<Item>) {
+    match method {
+        "frecency" => data.sort_by(|a, b| a.frecency().partial_cmp(&b.frecency()).unwrap_or(Ordering::Equal).reverse()),
+        "atime" => data.sort_by(|a, b| a.atime.cmp(&b.atime).reverse()),
+        "hits" => data.sort_by(|a, b| a.hits.cmp(&b.hits).reverse()),
+        _ => panic!("Unknown sort method: {}.", method)
+    }
 }
 
 fn cmd_add(settings: &Settings, data: &mut Vec<Item>, paths: &Vec<String>) {
@@ -137,7 +143,7 @@ fn cmd_add(settings: &Settings, data: &mut Vec<Item>, paths: &Vec<String>) {
         data.push(Item::new(&path));
     }
     if settings.history_size > 0 && data.len() > settings.history_size {
-        cmd_sort(data);
+        cmd_sort("frecency", data);
         while data.len() > settings.history_size {
             data.pop();
         }
@@ -148,10 +154,10 @@ fn cmd_delete(data: &mut Vec<Item>, paths: &Vec<String>) {
     data.retain(|ref a| paths.iter().find(|&p| a.path == *p).is_none());
 }
 
-fn cmd_query(data: &mut Vec<Item>, pattern: &str) -> Result<(), Error> {
+fn cmd_query(settings: &Settings, data: &mut Vec<Item>, pattern: &str) -> Result<(), Error> {
     let re = try!(Regex::new(pattern));
     let mut stdout = stdout();
-    cmd_sort(data);
+    cmd_sort(&settings.sort_by, data);
     for item in data.iter() {
         if re.is_match(&item.path) {
             // avoid panicking on `fdb -q PATTERN | head -n 1`
@@ -173,7 +179,8 @@ fn cmd_query(data: &mut Vec<Item>, pattern: &str) -> Result<(), Error> {
 fn main() {
     let mut settings = Settings {
         history_size: 600,
-        db_path: "~/.z.json".to_string()
+        db_path: "~/.z.json".to_string(),
+        sort_by: "frecency".to_string()
     };
 
     let args: Vec<String> = env::args().skip(1).collect();
@@ -187,6 +194,7 @@ fn main() {
     opts.optflag("h", "help", "Print this help message.");
     opts.optflag("v", "version", "Print the version number.");
     opts.optopt("i", "db-path", "Use the given database.", "DB_PATH");
+    opts.optopt("s", "sort-by", "Use the given sort method.", "frecency|atime|hits");
 
     let matches = match opts.parse(&args) {
         Ok(m) => m,
@@ -221,6 +229,7 @@ fn main() {
     settings.db_path = get_env::<String>("FDB_DB_PATH", settings.db_path);
     settings.db_path = matches.opt_str("i").unwrap_or(settings.db_path);
     settings.db_path = settings.db_path.replace("~", home_dir);
+    settings.sort_by = matches.opt_str("s").unwrap_or(settings.sort_by);
     settings.history_size = get_env::<usize>("FDB_HISTORY_SIZE", settings.history_size);
 
     if matches.opt_present("u") {
@@ -236,7 +245,7 @@ fn main() {
         Some(Action::Add) => cmd_add(&settings, &mut data, &matches.free),
         Some(Action::Delete) => cmd_delete(&mut data, &matches.free),
         Some(Action::Query) => {
-            match cmd_query(&mut data, &matches.free.join(".*")) {
+            match cmd_query(&settings, &mut data, &matches.free.join(".*")) {
                 Err(e) => panic!("Can't parse query pattern: {:?}.", e),
                 _ => return
             }
