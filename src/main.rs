@@ -5,6 +5,7 @@ extern crate regex;
 
 use std::io::prelude::*;
 use std::env;
+use std::fs;
 use std::fs::File;
 use rustc_serialize::json;
 use time::get_time;
@@ -125,9 +126,11 @@ fn load_data(path: &str) -> Result<Vec<Item>, Error> {
 }
 
 fn save_data(data: &Vec<Item>, path: &str) -> Result<(), Error> {
-    let mut f = try!(File::create(path));
+    let np = path.to_string() + ".new";
+    let mut f = try!(File::create(&np));
     let j = try!(json::encode(data));
     try!(f.write(j.as_bytes()));
+    try!(fs::rename(np, path));
     Ok(())
 }
 
