@@ -201,7 +201,7 @@ fn main() {
     opts.optflag("q", "query", "Query for patterns in the database.");
     opts.optflag("a", "add", "Add paths to the database.");
     opts.optflag("d", "delete", "Delete paths from the database.");
-    opts.optflag("u", "unlimited", "Don't limit the size fo the database.");
+    opts.optflag("u", "unlimited", "Don't limit the size of the database.");
     opts.optflag("h", "help", "Print this help message.");
     opts.optflag("v", "version", "Print the version number.");
     opts.optopt("i", "db-path", "Use the given database.", "DB_PATH");
@@ -261,7 +261,7 @@ fn main() {
                 _ => return
             }
         }
-        None => unreachable!() 
+        None => unreachable!()
     }
 
     match save_data(&data, &settings.db_path) {
