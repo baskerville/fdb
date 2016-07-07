@@ -172,15 +172,12 @@ fn cmd_query(sort_by: SortBy, data: &mut Vec<Item>, pattern: &str) -> Result<(),
     for item in data.iter() {
         if re.is_match(&item.path) {
             // avoid panicking on `fdb -q PATTERN | head -n 1`
-            match write!(&mut stdout, "{}\n", item.path) {
-                Err(e) => {
-                    if e.kind() == ErrorKind::BrokenPipe {
-                        break;
-                    } else {
-                        panic!("Couldn't write to stdout: {:?}.", e);
-                    }
+            if let Err(e) = write!(&mut stdout, "{}\n", item.path) {
+                if e.kind() == ErrorKind::BrokenPipe {
+                    break;
+                } else {
+                    panic!("Couldn't write to stdout: {:?}.", e);
                 }
-                _ => {}
             }
         }
     }
@@ -264,8 +261,7 @@ fn main() {
         None => unreachable!()
     }
 
-    match save_data(&data, &settings.db_path) {
-        Err(e) => panic!("Can't save data: {:?}.", e),
-        _ => {}
+    if let Err(e) = save_data(&data, &settings.db_path) {
+        panic!("Can't save data: {:?}.", e);
     }
 }
