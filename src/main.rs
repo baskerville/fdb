@@ -14,7 +14,7 @@ use regex::Regex;
 use std::str::FromStr;
 use std::cmp::Ordering;
 use std::io::ErrorKind;
-use std::io::stdout as stdout;
+use std::io::stdout;
 use std::io::Error as IoError;
 use regex::Error as RegexError;
 
@@ -23,25 +23,25 @@ struct Item {
     path: String,
     // unix time of last access
     atime: i64,
-    hits: u32
+    hits: u32,
 }
 
 struct Settings {
     history_size: usize,
     db_path: String,
-    sort_by: SortBy
+    sort_by: SortBy,
 }
 
 enum Action {
     Query,
     Add,
-    Delete
+    Delete,
 }
 
 enum SortBy {
     Frecency,
     Atime,
-    Hits
+    Hits,
 }
 
 impl Item {
@@ -49,7 +49,7 @@ impl Item {
         Item {
             path: path.to_string(),
             atime: get_time().sec,
-            hits: 1
+            hits: 1,
         }
     }
 
@@ -73,7 +73,7 @@ fn parse_sort_method(name: &str) -> Option<SortBy> {
         "frecency" => Some(SortBy::Frecency),
         "atime" => Some(SortBy::Atime),
         "hits" => Some(SortBy::Hits),
-        _ => None
+        _ => None,
     }
 }
 
@@ -82,7 +82,7 @@ enum Error {
     Io(IoError),
     Decode(json::DecoderError),
     Encode(json::EncoderError),
-    Regex(RegexError)
+    Regex(RegexError),
 }
 
 impl From<IoError> for Error {
@@ -114,7 +114,8 @@ fn print_version() {
 }
 
 fn print_usage(opts: &Options) {
-    println!("{}", opts.usage("Usage: fdb -h|-v|-q|-a|-d [-i DB_PATH] PATTERN...|PATH..."));
+    println!("{}",
+             opts.usage("Usage: fdb -h|-v|-q|-a|-d [-i DB_PATH] PATTERN...|PATH..."));
 }
 
 fn load_data(path: &str) -> Result<Vec<Item>, Error> {
@@ -136,16 +137,20 @@ fn save_data(data: &Vec<Item>, path: &str) -> Result<(), Error> {
 
 fn cmd_sort(sort_by: SortBy, data: &mut Vec<Item>) {
     match sort_by {
-        SortBy::Frecency => data.sort_by(|a, b| a.frecency().partial_cmp(&b.frecency()).unwrap_or(Ordering::Equal).reverse()),
+        SortBy::Frecency => {
+            data.sort_by(|a, b| {
+                a.frecency().partial_cmp(&b.frecency()).unwrap_or(Ordering::Equal).reverse()
+            })
+        }
         SortBy::Atime => data.sort_by(|a, b| a.atime.cmp(&b.atime).reverse()),
-        SortBy::Hits => data.sort_by(|a, b| a.hits.cmp(&b.hits).reverse())
+        SortBy::Hits => data.sort_by(|a, b| a.hits.cmp(&b.hits).reverse()),
     }
 }
 
 fn cmd_add(settings: &Settings, data: &mut Vec<Item>, paths: &Vec<String>) {
     for path in paths.iter() {
         {
-            let existing:Option<&mut Item> = data.iter_mut().find(|ref a| a.path == *path);
+            let existing: Option<&mut Item> = data.iter_mut().find(|ref a| a.path == *path);
             if existing.is_some() {
                 existing.unwrap().touch();
                 continue;
@@ -188,7 +193,7 @@ fn main() {
     let mut settings = Settings {
         history_size: 600,
         db_path: "~/.z.json".to_string(),
-        sort_by: SortBy::Frecency
+        sort_by: SortBy::Frecency,
     };
 
     let args: Vec<String> = env::args().skip(1).collect();
@@ -202,15 +207,18 @@ fn main() {
     opts.optflag("h", "help", "Print this help message.");
     opts.optflag("v", "version", "Print the version number.");
     opts.optopt("i", "db-path", "Use the given database.", "DB_PATH");
-    opts.optopt("s", "sort-by", "Use the given sort method.", "frecency|atime|hits");
+    opts.optopt("s",
+                "sort-by",
+                "Use the given sort method.",
+                "frecency|atime|hits");
 
     let matches = match opts.parse(&args) {
         Ok(m) => m,
-        Err(e) => panic!("Failed to parse the command line options: {:?}.", e)
+        Err(e) => panic!("Failed to parse the command line options: {:?}.", e),
     };
 
     if matches.opt_present("q") {
-       action = Some(Action::Query);
+        action = Some(Action::Query);
     } else if matches.opt_present("a") {
         action = Some(Action::Add);
     } else if matches.opt_present("d") {
@@ -231,13 +239,14 @@ fn main() {
     let home_dir = env::home_dir();
     let home_dir = match home_dir.as_ref().and_then(|a| a.to_str()) {
         Some(val) => val,
-        None => panic!("Can't retreive home directory.")
+        None => panic!("Can't retreive home directory."),
     };
 
     settings.db_path = get_env::<String>("FDB_DB_PATH", settings.db_path);
     settings.db_path = matches.opt_str("i").unwrap_or(settings.db_path);
     settings.db_path = settings.db_path.replace("~", home_dir);
-    settings.sort_by = matches.opt_str("s").and_then(|name| parse_sort_method(&name)).unwrap_or(settings.sort_by);
+    settings.sort_by =
+        matches.opt_str("s").and_then(|name| parse_sort_method(&name)).unwrap_or(settings.sort_by);
     settings.history_size = get_env::<usize>("FDB_HISTORY_SIZE", settings.history_size);
 
     if matches.opt_present("u") {
@@ -246,7 +255,7 @@ fn main() {
 
     let mut data: Vec<Item> = match load_data(&settings.db_path) {
         Ok(val) => val,
-        Err(e) => panic!("Can't load data: {:?}.", e)
+        Err(e) => panic!("Can't load data: {:?}.", e),
     };
 
     match action {
@@ -255,10 +264,10 @@ fn main() {
         Some(Action::Query) => {
             match cmd_query(settings.sort_by, &mut data, &matches.free.join(".*")) {
                 Err(e) => panic!("Can't parse query pattern: {:?}.", e),
-                _ => return
+                _ => return,
             }
         }
-        None => unreachable!()
+        None => unreachable!(),
     }
 
     if let Err(e) = save_data(&data, &settings.db_path) {
