@@ -131,6 +131,7 @@ fn save_data(data: &Vec<Item>, path: &str) -> Result<(), Error> {
     let mut f = try!(File::create(&np));
     let j = try!(json::encode(data));
     try!(f.write(j.as_bytes()));
+    try!(f.flush());
     try!(fs::rename(np, path));
     Ok(())
 }
