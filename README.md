@@ -1,6 +1,6 @@
 # Bootstrap
 
-	echo "[]" > ~/.z.json
+	fdb -z
 
 # Examples
 
