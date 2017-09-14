@@ -10,6 +10,9 @@ extern crate getopts;
 extern crate regex;
 
 use std::io::prelude::*;
+use std::path::PathBuf;
+use std::thread;
+use std::time::Duration;
 use std::str::FromStr;
 use std::cmp::Ordering;
 use std::io::ErrorKind;
@@ -17,7 +20,7 @@ use std::io::stdout;
 use std::env;
 use std::fs;
 use std::fs::File;
-use bincode::{serialize, deserialize_from, Infinite};
+use bincode::{serialize_into, deserialize_from, Infinite};
 use time::get_time;
 use getopts::Options;
 use regex::Regex;
@@ -51,6 +54,27 @@ enum SortBy {
     Frecency,
     Atime,
     Hits,
+}
+
+struct Lock(PathBuf);
+
+impl Lock {
+    pub fn new(path: &str) -> Result<Lock> {
+        let path = PathBuf::from(format!("{}.lock", path));
+        while path.exists() {
+            thread::sleep(Duration::from_millis(30));
+        }
+        File::create(&path).chain_err(
+            || "Can't create the lock file",
+        )?;
+        Ok(Lock(path))
+    }
+}
+
+impl Drop for Lock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
 }
 
 impl Item {
@@ -111,15 +135,14 @@ fn load_data(path: &str) -> Result<Vec<Item>> {
 fn save_data(data: &Vec<Item>, path: &str) -> Result<()> {
     let new_path = path.to_string() + ".tmp";
     let mut file = File::create(&new_path).chain_err(
-        || "Can't create temporary data file",
+        || "Can't create temporary database file",
     )?;
-    let bin = serialize(data, Infinite).chain_err(
-        || "Can't serialize the data",
+    serialize_into(&mut file, data, Infinite).chain_err(
+        || "Can't serialize data into the database",
     )?;
-    file.write(&bin[..]).chain_err(
-        || "Couldn't write data to file",
+    file.flush().chain_err(
+        || "Couldn't flush temporary database file",
     )?;
-    file.flush().chain_err(|| "Couldn't flush data file")?;
     fs::rename(new_path, path).chain_err(
         || "Couldn't rename temporary data file",
     )?;
@@ -165,7 +188,9 @@ fn cmd_delete(data: &mut Vec<Item>, paths: &Vec<String>) {
 }
 
 fn cmd_query(sort_by: SortBy, data: &mut Vec<Item>, pattern: &str) -> Result<()> {
-    let re = Regex::new(pattern).chain_err(|| "Couldn't create query regex")?;
+    let re = Regex::new(pattern).chain_err(
+        || "Couldn't create query regex",
+    )?;
     let mut stdout = stdout();
     cmd_sort(sort_by, data);
     for item in data.iter() {
@@ -233,13 +258,7 @@ fn main() {
         settings.history_size = 0;
     }
 
-    if matches.opt_present("q") {
-        action = Some(Action::Query);
-    } else if matches.opt_present("a") {
-        action = Some(Action::Add);
-    } else if matches.opt_present("d") {
-        action = Some(Action::Delete);
-    } else if matches.opt_present("z") {
+    if matches.opt_present("z") {
         if let Err(e) = save_data(&vec![], &settings.db_path) {
             panic!("Can't initialize data: {:?}.", e);
         }
@@ -250,6 +269,17 @@ fn main() {
     } else if matches.opt_present("v") {
         print_version();
         return;
+    }
+
+    #[allow(unused_variable)]
+    let lock = Lock::new(&settings.db_path);
+
+    if matches.opt_present("q") {
+        action = Some(Action::Query);
+    } else if matches.opt_present("a") {
+        action = Some(Action::Add);
+    } else if matches.opt_present("d") {
+        action = Some(Action::Delete);
     }
 
     if action.is_none() || matches.free.len() < 1 {
@@ -277,4 +307,6 @@ fn main() {
     if let Err(e) = save_data(&data, &settings.db_path) {
         panic!("Can't save data: {:?}.", e);
     }
+
+    drop(lock);
 }
