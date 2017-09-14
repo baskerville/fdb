@@ -271,8 +271,10 @@ fn main() {
         return;
     }
 
-    #[allow(unused_variable)]
-    let lock = Lock::new(&settings.db_path);
+    let lock = match Lock::new(&settings.db_path) {
+        Ok(val) => val,
+        Err(e) => panic!("Can't lock database: {:?}.", e),
+    };
 
     if matches.opt_present("q") {
         action = Some(Action::Query);

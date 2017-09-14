@@ -2,7 +2,7 @@
 authors = ["Bastien Dejean <nihilhill@gmail.com>"]
 name = "fdb"
 readme = "README.md"
-version = "0.3.0"
+version = "0.3.1"
 
 [dependencies]
 bincode = "0.8.0"
