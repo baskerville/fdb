@@ -9,6 +9,10 @@ extern crate time;
 extern crate getopts;
 extern crate regex;
 
+mod errors {
+    error_chain!{}
+}
+
 use std::io::prelude::*;
 use std::path::PathBuf;
 use std::thread;
@@ -24,11 +28,6 @@ use bincode::{serialize_into, deserialize_from, Infinite};
 use time::get_time;
 use getopts::Options;
 use regex::Regex;
-
-mod errors {
-    error_chain!{}
-}
-
 use errors::*;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -126,10 +125,7 @@ fn print_usage(opts: &Options) {
 
 fn load_data(path: &str) -> Result<Vec<Item>> {
     let mut f = File::open(path).chain_err(|| "Can't open data file")?;
-    let v: Vec<Item> = deserialize_from(&mut f, Infinite).chain_err(
-        || "Can't deserialize data",
-    )?;
-    Ok(v)
+    deserialize_from(&mut f, Infinite).chain_err(|| "Can't deserialize data")
 }
 
 fn save_data(data: &Vec<Item>, path: &str) -> Result<()> {
@@ -208,7 +204,9 @@ fn cmd_query(sort_by: SortBy, data: &mut Vec<Item>, pattern: &str) -> Result<()>
     Ok(())
 }
 
-fn main() {
+quick_main!(run);
+
+fn run() -> Result<()> {
     let mut settings = Settings {
         history_size: 600,
         db_path: "~/.z".to_string(),
@@ -234,16 +232,14 @@ fn main() {
         "frecency|atime|hits",
     );
 
-    let matches = match opts.parse(&args) {
-        Ok(m) => m,
-        Err(e) => panic!("Failed to parse the command line options: {:?}.", e),
-    };
+    let matches = opts.parse(&args).chain_err(
+        || "Failed to parse the command line options",
+    )?;
 
     let home_dir = env::home_dir();
-    let home_dir = match home_dir.as_ref().and_then(|a| a.to_str()) {
-        Some(val) => val,
-        None => panic!("Can't retreive home directory."),
-    };
+    let home_dir = home_dir.as_ref().and_then(|a| a.to_str()).chain_err(
+        || "Can't retreive home directory",
+    )?;
 
     settings.db_path = get_env::<String>("FDB_DB_PATH", settings.db_path);
     settings.db_path = matches.opt_str("i").unwrap_or(settings.db_path);
@@ -259,22 +255,18 @@ fn main() {
     }
 
     if matches.opt_present("z") {
-        if let Err(e) = save_data(&vec![], &settings.db_path) {
-            panic!("Can't initialize data: {:?}.", e);
-        }
-        return;
+        return save_data(&vec![], &settings.db_path).chain_err(|| "Can't initialize data");
     } else if matches.opt_present("h") {
         print_usage(&opts);
-        return;
+        return Ok(());
     } else if matches.opt_present("v") {
         print_version();
-        return;
+        return Ok(());
     }
 
-    let lock = match Lock::new(&settings.db_path) {
-        Ok(val) => val,
-        Err(e) => panic!("Can't lock database: {:?}.", e),
-    };
+    let lock = Lock::new(&settings.db_path).chain_err(
+        || "Can't lock database",
+    )?;
 
     if matches.opt_present("q") {
         action = Some(Action::Query);
@@ -286,29 +278,25 @@ fn main() {
 
     if action.is_none() || matches.free.len() < 1 {
         print_usage(&opts);
-        return;
+        return Ok(());
     }
 
-    let mut data: Vec<Item> = match load_data(&settings.db_path) {
-        Ok(val) => val,
-        Err(e) => panic!("Can't load data: {:?}.", e),
-    };
+    let action = action.unwrap();
+    let mut data: Vec<Item> = load_data(&settings.db_path).chain_err(|| "Can't load data")?;
 
     match action {
-        Some(Action::Add) => cmd_add(&settings, &mut data, &matches.free),
-        Some(Action::Delete) => cmd_delete(&mut data, &matches.free),
-        Some(Action::Query) => {
-            match cmd_query(settings.sort_by, &mut data, &matches.free.join(".*")) {
-                Err(e) => panic!("Can't parse query pattern: {:?}.", e),
-                _ => return,
-            }
+        Action::Add => cmd_add(&settings, &mut data, &matches.free),
+        Action::Delete => cmd_delete(&mut data, &matches.free),
+        Action::Query => {
+            return cmd_query(settings.sort_by, &mut data, &matches.free.join(".*"))
+                .chain_err(|| "Can't execute query")
         }
-        None => unreachable!(),
     }
 
-    if let Err(e) = save_data(&data, &settings.db_path) {
-        panic!("Can't save data: {:?}.", e);
-    }
+    save_data(&data, &settings.db_path).chain_err(
+        || "Can't save data",
+    )?;
 
     drop(lock);
+    Ok(())
 }
