@@ -23,6 +23,7 @@ use std::io::ErrorKind;
 use std::io::stdout;
 use std::env;
 use std::fs;
+use std::fs::OpenOptions;
 use std::fs::File;
 use bincode::{serialize_into, deserialize_from, Infinite};
 use time::get_time;
@@ -63,9 +64,17 @@ impl Lock {
         while path.exists() {
             thread::sleep(Duration::from_millis(30));
         }
-        File::create(&path).chain_err(
-            || "Can't create the lock file",
-        )?;
+        let mut file = OpenOptions::new().write(true).create_new(true).open(&path);
+        while let Err(e) = file {
+            if e.kind() == ErrorKind::AlreadyExists {
+                while path.exists() {
+                    thread::sleep(Duration::from_millis(30));
+                }
+            } else {
+                return Err(Error::with_chain(e, "Can't create the lock file"));
+            }
+            file = OpenOptions::new().write(true).create_new(true).open(&path);
+        }
         Ok(Lock(path))
     }
 }
