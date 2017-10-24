@@ -44,12 +44,14 @@ struct Settings {
     sort_by: SortBy,
 }
 
+#[derive(Copy, Clone)]
 enum Action {
     Query,
     Add,
     Delete,
 }
 
+#[derive(Copy, Clone)]
 enum SortBy {
     Frecency,
     Atime,
@@ -137,7 +139,7 @@ fn load_data(path: &str) -> Result<Vec<Item>> {
     deserialize_from(&mut f, Infinite).chain_err(|| "Can't deserialize data")
 }
 
-fn save_data(data: &Vec<Item>, path: &str) -> Result<()> {
+fn save_data(data: &[Item], path: &str) -> Result<()> {
     let new_path = path.to_string() + ".tmp";
     let mut file = File::create(&new_path).chain_err(
         || "Can't create temporary database file",
@@ -169,16 +171,16 @@ fn sort_method_frecency(a: &Item, b: &Item) -> Ordering {
         .reverse()
 }
 
-fn cmd_add(settings: &Settings, data: &mut Vec<Item>, paths: &Vec<String>) {
+fn cmd_add(settings: &Settings, data: &mut Vec<Item>, paths: &[String]) {
     for path in paths.iter() {
         {
-            let existing: Option<&mut Item> = data.iter_mut().find(|ref a| a.path == *path);
+            let existing: Option<&mut Item> = data.iter_mut().find(|a| a.path == *path);
             if existing.is_some() {
                 existing.unwrap().touch();
                 continue;
             }
         }
-        data.push(Item::new(&path));
+        data.push(Item::new(path));
     }
     if settings.history_size > 0 && data.len() > settings.history_size {
         cmd_sort(SortBy::Frecency, data);
@@ -188,8 +190,8 @@ fn cmd_add(settings: &Settings, data: &mut Vec<Item>, paths: &Vec<String>) {
     }
 }
 
-fn cmd_delete(data: &mut Vec<Item>, paths: &Vec<String>) {
-    data.retain(|ref a| paths.iter().find(|&p| a.path == *p).is_none());
+fn cmd_delete(data: &mut Vec<Item>, paths: &[String]) {
+    data.retain(|a| paths.iter().find(|&p| a.path == *p).is_none());
 }
 
 fn cmd_query(sort_by: SortBy, data: &mut Vec<Item>, pattern: &str) -> Result<()> {
@@ -264,7 +266,7 @@ fn run() -> Result<()> {
     }
 
     if matches.opt_present("z") {
-        return save_data(&vec![], &settings.db_path).chain_err(|| "Can't initialize data");
+        return save_data(&[], &settings.db_path).chain_err(|| "Can't initialize data");
     } else if matches.opt_present("h") {
         print_usage(&opts);
         return Ok(());
