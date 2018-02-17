@@ -25,7 +25,7 @@ use std::env;
 use std::fs;
 use std::fs::OpenOptions;
 use std::fs::File;
-use bincode::{serialize_into, deserialize_from, Infinite};
+use bincode::{serialize_into, deserialize_from};
 use time::get_time;
 use getopts::Options;
 use regex::Regex;
@@ -136,7 +136,7 @@ fn print_usage(opts: &Options) {
 
 fn load_data(path: &str) -> Result<Vec<Item>> {
     let mut f = File::open(path).chain_err(|| "Can't open data file")?;
-    deserialize_from(&mut f, Infinite).chain_err(|| "Can't deserialize data")
+    deserialize_from(&mut f).chain_err(|| "Can't deserialize data")
 }
 
 fn save_data(data: &[Item], path: &str) -> Result<()> {
@@ -144,7 +144,7 @@ fn save_data(data: &[Item], path: &str) -> Result<()> {
     let mut file = File::create(&new_path).chain_err(
         || "Can't create temporary database file",
     )?;
-    serialize_into(&mut file, data, Infinite).chain_err(
+    serialize_into(&mut file, data).chain_err(
         || "Can't serialize data into the database",
     )?;
     file.flush().chain_err(
