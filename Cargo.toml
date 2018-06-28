@@ -1,13 +1,13 @@
 [package]
 authors = ["Bastien Dejean <nihilhill@gmail.com>"]
 name = "fdb"
-version = "0.6.1"
+version = "0.6.2"
 
 [dependencies]
 bincode = "1.0.0"
-error-chain = "0.11.0"
+failure = "0.1.1"
 getopts = "0.2.17"
-regex = "0.2.6"
-serde = "1.0.27"
-serde_derive = "1.0.27"
-time = "0.1.39"
+regex = "1.0.0"
+serde = "1.0.65"
+serde_derive = "1.0.65"
+time = "0.1.40"

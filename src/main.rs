@@ -1,17 +1,9 @@
-#![recursion_limit = "1024"]
-
-#[macro_use]
-extern crate error_chain;
-#[macro_use]
-extern crate serde_derive;
+#[macro_use] extern crate failure;
+#[macro_use] extern crate serde_derive;
 extern crate bincode;
 extern crate time;
 extern crate getopts;
 extern crate regex;
-
-mod errors {
-    error_chain!{}
-}
 
 use std::io::prelude::*;
 use std::path::PathBuf;
@@ -21,6 +13,7 @@ use std::str::FromStr;
 use std::cmp::Ordering;
 use std::io::ErrorKind;
 use std::io::stdout;
+use std::process;
 use std::env;
 use std::fs;
 use std::fs::OpenOptions;
@@ -29,7 +22,7 @@ use bincode::{serialize_into, deserialize_from};
 use time::get_time;
 use getopts::Options;
 use regex::Regex;
-use errors::*;
+use failure::{Error, ResultExt};
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct Item {
@@ -61,7 +54,7 @@ enum SortBy {
 struct Lock(PathBuf);
 
 impl Lock {
-    pub fn new(path: &str) -> Result<Lock> {
+    pub fn new(path: &str) -> Result<Lock, Error> {
         let path = PathBuf::from(format!("{}.lock", path));
         while path.exists() {
             thread::sleep(Duration::from_millis(30));
@@ -73,7 +66,7 @@ impl Lock {
                     thread::sleep(Duration::from_millis(30));
                 }
             } else {
-                return Err(Error::with_chain(e, "Can't create the lock file"));
+                return Err(Error::from(e).context("Can't create the lock file").into());
             }
             file = OpenOptions::new().write(true).create_new(true).open(&path);
         }
@@ -134,26 +127,17 @@ fn print_usage(opts: &Options) {
     );
 }
 
-fn load_data(path: &str) -> Result<Vec<Item>> {
-    let mut f = File::open(path).chain_err(|| "Can't open data file")?;
-    deserialize_from(&mut f).chain_err(|| "Can't deserialize data")
+fn load_data(path: &str) -> Result<Vec<Item>, Error> {
+    let mut f = File::open(path).context("Can't open data file")?;
+    deserialize_from(&mut f).context("Can't deserialize data").map_err(Into::into)
 }
 
-fn save_data(data: &[Item], path: &str) -> Result<()> {
+fn save_data(data: &[Item], path: &str) -> Result<(), Error> {
     let new_path = path.to_string() + ".tmp";
-    let mut file = File::create(&new_path).chain_err(
-        || "Can't create temporary database file",
-    )?;
-    serialize_into(&mut file, data).chain_err(
-        || "Can't serialize data into the database",
-    )?;
-    file.flush().chain_err(
-        || "Couldn't flush temporary database file",
-    )?;
-    fs::rename(new_path, path).chain_err(
-        || "Couldn't rename temporary data file",
-    )?;
-    Ok(())
+    let mut file = File::create(&new_path)?;
+    serialize_into(&mut file, data).context("Can't serialize data into the database")?;
+    file.flush().context("Couldn't flush temporary database file")?;
+    fs::rename(new_path, path).context("Couldn't rename temporary data file").map_err(Into::into)
 }
 
 fn cmd_sort(sort_by: SortBy, data: &mut Vec<Item>) {
@@ -194,16 +178,14 @@ fn cmd_delete(data: &mut Vec<Item>, paths: &[String]) {
     data.retain(|a| paths.iter().find(|&p| a.path == *p).is_none());
 }
 
-fn cmd_query(sort_by: SortBy, data: &mut Vec<Item>, pattern: &str) -> Result<()> {
-    let re = Regex::new(pattern).chain_err(
-        || "Couldn't create query regex",
-    )?;
+fn cmd_query(sort_by: SortBy, data: &mut Vec<Item>, pattern: &str) -> Result<(), Error> {
+    let re = Regex::new(pattern).context("Couldn't create query regex")?;
     let mut stdout = stdout();
     cmd_sort(sort_by, data);
     for item in data.iter() {
         if re.is_match(&item.path) {
             // avoid panicking on `fdb -q PATTERN | head -n 1`
-            if let Err(e) = write!(&mut stdout, "{}\n", item.path) {
+            if let Err(e) = writeln!(&mut stdout, "{}", item.path) {
                 if e.kind() == ErrorKind::BrokenPipe {
                     break;
                 } else {
@@ -215,9 +197,7 @@ fn cmd_query(sort_by: SortBy, data: &mut Vec<Item>, pattern: &str) -> Result<()>
     Ok(())
 }
 
-quick_main!(run);
-
-fn run() -> Result<()> {
+fn run() -> Result<(), Error> {
     let mut settings = Settings {
         history_size: 600,
         db_path: "~/.z".to_string(),
@@ -243,14 +223,10 @@ fn run() -> Result<()> {
         "frecency|atime|hits",
     );
 
-    let matches = opts.parse(&args).chain_err(
-        || "Failed to parse the command line options",
-    )?;
+    let matches = opts.parse(&args).context("Failed to parse the command line options")?;
 
     let home_dir = env::home_dir();
-    let home_dir = home_dir.as_ref().and_then(|a| a.to_str()).chain_err(
-        || "Can't retreive home directory",
-    )?;
+    let home_dir = home_dir.as_ref().and_then(|a| a.to_str()).ok_or_else(|| format_err!("Can't retreive home directory"))?;
 
     settings.db_path = get_env::<String>("FDB_DB_PATH", settings.db_path);
     settings.db_path = matches.opt_str("i").unwrap_or(settings.db_path);
@@ -266,7 +242,7 @@ fn run() -> Result<()> {
     }
 
     if matches.opt_present("z") {
-        return save_data(&[], &settings.db_path).chain_err(|| "Can't initialize data");
+        return save_data(&[], &settings.db_path).context("Can't initialize data").map_err(Into::into);
     } else if matches.opt_present("h") {
         print_usage(&opts);
         return Ok(());
@@ -275,9 +251,7 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
-    let lock = Lock::new(&settings.db_path).chain_err(
-        || "Can't lock database",
-    )?;
+    let lock = Lock::new(&settings.db_path).context("Can't lock database")?;
 
     if matches.opt_present("q") {
         action = Some(Action::Query);
@@ -287,27 +261,34 @@ fn run() -> Result<()> {
         action = Some(Action::Delete);
     }
 
-    if action.is_none() || matches.free.len() < 1 {
+    if action.is_none() || matches.free.is_empty() {
         print_usage(&opts);
         return Ok(());
     }
 
     let action = action.unwrap();
-    let mut data: Vec<Item> = load_data(&settings.db_path).chain_err(|| "Can't load data")?;
+    let mut data: Vec<Item> = load_data(&settings.db_path).context("Can't load data")?;
 
     match action {
         Action::Add => cmd_add(&settings, &mut data, &matches.free),
         Action::Delete => cmd_delete(&mut data, &matches.free),
         Action::Query => {
             return cmd_query(settings.sort_by, &mut data, &matches.free.join(".*"))
-                .chain_err(|| "Can't execute query")
+                .context("Can't execute query").map_err(Into::into)
         }
     }
 
-    save_data(&data, &settings.db_path).chain_err(
-        || "Can't save data",
-    )?;
+    save_data(&data, &settings.db_path).context("Can't save data")?;
 
     drop(lock);
     Ok(())
+}
+
+fn main() {
+    if let Err(e) = run() {
+        for e in e.causes() {
+            eprintln!("fdb: {}.", e);
+        }
+        process::exit(1);
+    }
 }
