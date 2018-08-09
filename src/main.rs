@@ -286,7 +286,7 @@ fn run() -> Result<(), Error> {
 
 fn main() {
     if let Err(e) = run() {
-        for e in e.causes() {
+        for e in e.iter_chain() {
             eprintln!("fdb: {}.", e);
         }
         process::exit(1);
