@@ -1,10 +1,3 @@
-#[macro_use] extern crate failure;
-#[macro_use] extern crate serde_derive;
-extern crate bincode;
-extern crate time;
-extern crate getopts;
-extern crate regex;
-
 use std::io::prelude::*;
 use std::path::PathBuf;
 use std::thread;
@@ -22,7 +15,8 @@ use bincode::{serialize_into, deserialize_from};
 use time::get_time;
 use getopts::Options;
 use regex::Regex;
-use failure::{Error, ResultExt};
+use serde_derive::{Serialize, Deserialize};
+use failure::{Error, ResultExt, format_err};
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct Item {
@@ -225,7 +219,7 @@ fn run() -> Result<(), Error> {
 
     let matches = opts.parse(&args).context("Failed to parse the command line options")?;
 
-    let home_dir = env::home_dir();
+    let home_dir = dirs::home_dir();
     let home_dir = home_dir.as_ref().and_then(|a| a.to_str()).ok_or_else(|| format_err!("Can't retreive home directory"))?;
 
     settings.db_path = get_env::<String>("FDB_DB_PATH", settings.db_path);
